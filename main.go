@@ -5,26 +5,29 @@ import (
 	"encoding/json"
 	"github.com/xeipuuv/gojsonschema"
 	"fmt"
-    "io"
-    "os"
-    "strings"
-    "time"
-    "log"
+	"io"
+	"os"
+	"strings"
+	"time"
+	"log"
 	"net"
-    "net/http"
-    "net/url"
-    "crypto/tls"
+	"net/http"
+	"net/url"
+	"crypto/tls"
 )
+
 
 type Config struct {
 	Users map[string]UserConfig `yaml:"users"`
 }
+
 
 type UserConfig struct {
 	Password string   `yaml:"password"`
 	Path     string   `yaml:"path"`
 	Methods  []string `yaml:"methos"`
 }
+
 
 func main() {
 	// Get YAML configuration file from environment variable
@@ -108,6 +111,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+authPort, nil))
 }
 
+
 func methodAllowed(method string, allowedMethods []string) bool {
 	for _, m := range allowedMethods {
 		if strings.EqualFold(m, method) {
@@ -117,78 +121,80 @@ func methodAllowed(method string, allowedMethods []string) bool {
 	return false
 }
 
+
 func proxyRequest(w http.ResponseWriter, r *http.Request, upstream string) {
-    // Parse the upstream URL
-    parsedUpstream, err := url.Parse(upstream)
-    if err != nil {
-        log.Printf("Invalid upstream URL: %v", err)
-        http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-        return
-    }
+	// Parse the upstream URL
+	parsedUpstream, err := url.Parse(upstream)
+	if err != nil {
+		log.Printf("Invalid upstream URL: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 
-    // Log the upstream address and schema
-    log.Printf("Proxying request to upstream: %s (schema: %s)", parsedUpstream.Host, parsedUpstream.Scheme)
+	// Log the upstream address and schema
+	log.Printf("Proxying request to upstream: %s (schema: %s)", parsedUpstream.Host, parsedUpstream.Scheme)
 
-    // Modify the request URL to point to the upstream server
-    r.URL.Scheme = parsedUpstream.Scheme
-    r.URL.Host = parsedUpstream.Host
-    r.RequestURI = ""
-    r.Host = parsedUpstream.Host
+	// Modify the request URL to point to the upstream server
+	r.URL.Scheme = parsedUpstream.Scheme
+	r.URL.Host = parsedUpstream.Host
+	r.RequestURI = ""
+	r.Host = parsedUpstream.Host
 
-    // Set timeouts for the HTTP client to avoid indefinite waiting
-    timeout := 10 * time.Second // Set a reasonable timeout (e.g., 10 seconds)
+	// Set timeouts for the HTTP client to avoid indefinite waiting
+	timeout := 10 * time.Second // Set a reasonable timeout (e.g., 10 seconds)
 
-    // Create an HTTP client with TLS configuration allow Insecure TLS
-    var client *http.Client
-    if parsedUpstream.Scheme == "https" {
-        // Create a custom HTTP client that conditionally skips certificate verification
-        customTransport := &http.Transport{
-            TLSClientConfig: &tls.Config{
-                InsecureSkipVerify: true, // Use the value from AUTH_INSEC_UPSTREAM
-            },
-            // Set the timeout for the transport layer
-            DialContext: (&net.Dialer{
-                Timeout: timeout,
-            }).DialContext,
-            // Set the TLS handshake timeout (separate from the dial timeout)
-            TLSHandshakeTimeout: timeout,
-        }
-        client = &http.Client{
-            Transport: customTransport,
-            Timeout:   timeout, // Set overall client timeout
-        }
-    } else {
-        // Default HTTP client for non-HTTPS
-        client = &http.Client{
-            Timeout: timeout, // Set overall client timeout
-        }
-    }
+	// Create an HTTP client with TLS configuration allow Insecure TLS
+	var client *http.Client
+	if parsedUpstream.Scheme == "https" {
+		// Create a custom HTTP client that conditionally skips certificate verification
+		customTransport := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // Use the value from AUTH_INSEC_UPSTREAM
+			},
+			// Set the timeout for the transport layer
+			DialContext: (&net.Dialer{
+				Timeout: timeout,
+			}).DialContext,
+			// Set the TLS handshake timeout (separate from the dial timeout)
+			TLSHandshakeTimeout: timeout,
+		}
+		client = &http.Client{
+			Transport: customTransport,
+			Timeout:   timeout, // Set overall client timeout
+		}
+	} else {
+		// Default HTTP client for non-HTTPS
+		client = &http.Client{
+			Timeout: timeout, // Set overall client timeout
+		}
+	}
 
-    // Forward the request
-    resp, err := client.Do(r)
-    if err != nil {
-        log.Printf("Error connecting to upstream server: %v", err)
-        http.Error(w, "Failed to connect to upstream server", http.StatusBadGateway)
-        return
-    }
-    defer resp.Body.Close()
+	// Forward the request
+	resp, err := client.Do(r)
+	if err != nil {
+		log.Printf("Error connecting to upstream server: %v", err)
+		http.Error(w, "Failed to connect to upstream server", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
 
-    // Copy response from upstream server to the client
-    for k, v := range resp.Header {
-        w.Header()[k] = v
-    }
-    w.WriteHeader(resp.StatusCode)
-    if _, err := io.Copy(w, resp.Body); err != nil {
-        log.Printf("Failed to copy response body: %v", err)
-    }
+	// Copy response from upstream server to the client
+	for k, v := range resp.Header {
+		w.Header()[k] = v
+	}
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("Failed to copy response body: %v", err)
+	}
 }
 
 
-// logRequest logs details about the incoming HTTP request
 func logRequest(r *http.Request) {
+	// logRequest logs details about the incoming HTTP request
 	log.Printf("Request: Method=%s, Path=%s, RemoteAddr=%s, Headers=%v",
 		r.Method, r.URL.Path, r.RemoteAddr, r.Header)
 }
+
 
 func validateYAMLWithSchema(configFile string) {
 	// Load the YAML schema file
