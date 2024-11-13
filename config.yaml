@@ -1,0 +1,21 @@
+# This is Sample Config file
+
+users:
+  test1:
+    password: "1234567890"
+    path: "/api/v1/31AB-F0A2/"
+    methos:
+      - get
+      - post
+      
+  admin:
+    password: "admin"
+    path: "/"
+    methos:
+      - get
+      - post
+      - put
+      - delete
+      - patch
+      - head
+      - options
