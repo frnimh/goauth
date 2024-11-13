@@ -2,13 +2,15 @@ package main
 
 import (
 	"gopkg.in/yaml.v3"
-	"io"
-	"log"
-	"net/http"
-	"os"
-	"strings"
-	"crypto/tls"
-	"net/url"
+    "io"
+    "os"
+    "strings"
+    "time"
+    "log"
+	"net"
+    "net/http"
+    "net/url"
+    "crypto/tls"
 )
 
 type Config struct {
@@ -127,19 +129,33 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, upstream string) {
     r.RequestURI = ""
     r.Host = parsedUpstream.Host
 
-    // Create an HTTP client
+    // Set timeouts for the HTTP client to avoid indefinite waiting
+    timeout := 10 * time.Second // Set a reasonable timeout (e.g., 10 seconds)
+
+    // Create an HTTP client with TLS configuration allow Insecure TLS
     var client *http.Client
     if parsedUpstream.Scheme == "https" {
-        // Create a custom HTTP client that skips certificate verification for HTTPS
+        // Create a custom HTTP client that conditionally skips certificate verification
         customTransport := &http.Transport{
             TLSClientConfig: &tls.Config{
-                InsecureSkipVerify: true, // WARNING: Only use in trusted environments
+                InsecureSkipVerify: true, // Use the value from AUTH_INSEC_UPSTREAM
             },
+            // Set the timeout for the transport layer
+            DialContext: (&net.Dialer{
+                Timeout: timeout,
+            }).DialContext,
+            // Set the TLS handshake timeout (separate from the dial timeout)
+            TLSHandshakeTimeout: timeout,
         }
-        client = &http.Client{Transport: customTransport}
+        client = &http.Client{
+            Transport: customTransport,
+            Timeout:   timeout, // Set overall client timeout
+        }
     } else {
         // Default HTTP client for non-HTTPS
-        client = &http.Client{}
+        client = &http.Client{
+            Timeout: timeout, // Set overall client timeout
+        }
     }
 
     // Forward the request
