@@ -2,6 +2,9 @@ package main
 
 import (
 	"gopkg.in/yaml.v3"
+	"encoding/json"
+	"github.com/xeipuuv/gojsonschema"
+	"fmt"
     "io"
     "os"
     "strings"
@@ -30,13 +33,16 @@ func main() {
 		configFile = "config.yaml" // Default file
 	}
 
+	// Validate the YAML configuration file with the schema
+	validateYAMLWithSchema(configFile)
+
+	// Parse configuration file after validation
 	file, err := os.Open(configFile)
 	if err != nil {
 		log.Fatalf("Failed to open config file: %v", err)
 	}
 	defer file.Close()
 
-	// Parse configuration
 	var config Config
 	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
 		log.Fatalf("Failed to parse config file: %v", err)
@@ -182,4 +188,66 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, upstream string) {
 func logRequest(r *http.Request) {
 	log.Printf("Request: Method=%s, Path=%s, RemoteAddr=%s, Headers=%v",
 		r.Method, r.URL.Path, r.RemoteAddr, r.Header)
+}
+
+func validateYAMLWithSchema(configFile string) {
+	// Load the YAML schema file
+	schemaFile, err := os.Open("yaml-schema.json") // Change to your actual JSON schema file path
+	if err != nil {
+		log.Fatalf("Failed to open schema file: %v", err)
+	}
+	defer schemaFile.Close()
+
+	// Read the schema content
+	schemaContent, err := io.ReadAll(schemaFile)
+	if err != nil {
+		log.Fatalf("Failed to read schema file: %v", err)
+	}
+
+	// Parse JSON schema
+	schemaLoader := gojsonschema.NewStringLoader(string(schemaContent))
+
+	// Load the YAML file
+	yamlFile, err := os.Open(configFile)
+	if err != nil {
+		log.Fatalf("Failed to open YAML file: %v", err)
+	}
+	defer yamlFile.Close()
+
+	// Read YAML content
+	yamlContent, err := io.ReadAll(yamlFile)
+	if err != nil {
+		log.Fatalf("Failed to read YAML file: %v", err)
+	}
+
+	// Parse YAML content
+	var yamlData interface{}
+	err = yaml.Unmarshal(yamlContent, &yamlData)
+	if err != nil {
+		log.Fatalf("Failed to parse YAML: %v", err)
+	}
+
+	// Convert YAML to JSON format
+	jsonData, err := json.Marshal(yamlData)
+	if err != nil {
+		log.Fatalf("Failed to convert YAML to JSON: %v", err)
+	}
+
+	// Load the JSON data for validation
+	document := gojsonschema.NewStringLoader(string(jsonData))
+
+	// Validate the YAML against the JSON schema
+	result, err := gojsonschema.Validate(schemaLoader, document)
+	if err != nil {
+		log.Fatalf("YAML validation failed: %v", err)
+	}
+	if result.Valid() {
+		fmt.Println("YAML file is valid according to the JSON schema!")
+	} else {
+		fmt.Printf("The document is not valid. See errors:\n")
+		for _, desc := range result.Errors() {
+			fmt.Printf("- %s\n", desc)
+		}
+		os.Exit(1) // Exit with an error code if validation fails
+	}
 }

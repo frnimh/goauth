@@ -1,0 +1,35 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "users": {
+        "type": "object",
+        "patternProperties": {
+          "^[a-zA-Z0-9-_]+$": {
+            "type": "object",
+            "properties": {
+              "password": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "methos": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["get", "post", "put", "delete", "patch", "head", "options"]
+                }
+              }
+            },
+            "required": ["password", "path", "methos"],
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": ["users"],
+    "additionalProperties": false
+  }
+  
