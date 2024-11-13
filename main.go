@@ -40,6 +40,9 @@ func main() {
 
 	// Get environment variables
 	authType := os.Getenv("AUTH_TYPE")
+	if authType == "" {
+		authType = "none"
+	}
 	authUpstream := os.Getenv("AUTH_UPSTREAM")
 	if authUpstream == "" {
 		log.Fatal("AUTH_UPSTREAM must be set")
