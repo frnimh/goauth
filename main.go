@@ -56,18 +56,22 @@ func main() {
 		if authType != "none" {
 			username, password, ok := r.BasicAuth()
 			if !ok {
+				// Send `WWW-Authenticate` header to trigger login popup
+				w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 	
 			userConfig, exists := config.Users[username]
 			if !exists || userConfig.Password != password {
+				// Send `WWW-Authenticate` header to trigger login popup
+				w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 	
 			// Allow exact matches and sub-paths
-			if r.URL.Path != strings.TrimSuffix(userConfig.Path, "/") && 
+			if r.URL.Path != strings.TrimSuffix(userConfig.Path, "/") &&
 			   !strings.HasPrefix(r.URL.Path, userConfig.Path) {
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
@@ -84,8 +88,6 @@ func main() {
 		proxyRequest(w, r, authUpstream)
 	}
 	
-	
-
 	http.HandleFunc("/", handler)
 
 	// Start server
