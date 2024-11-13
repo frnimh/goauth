@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"crypto/tls"
+	"net/url"
 )
 
 type Config struct {
@@ -108,33 +110,55 @@ func methodAllowed(method string, allowedMethods []string) bool {
 }
 
 func proxyRequest(w http.ResponseWriter, r *http.Request, upstream string) {
-	// Log the upstream address
-	log.Printf("Proxying request to upstream: %s", upstream)
+    // Parse the upstream URL
+    parsedUpstream, err := url.Parse(upstream)
+    if err != nil {
+        log.Printf("Invalid upstream URL: %v", err)
+        http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+        return
+    }
 
-	// Modify the request URL to point to the upstream server
-	r.URL.Scheme = "http"
-	r.URL.Host = upstream
-	r.RequestURI = ""
-	r.Host = upstream
+    // Log the upstream address and schema
+    log.Printf("Proxying request to upstream: %s (schema: %s)", parsedUpstream.Host, parsedUpstream.Scheme)
 
-	// Forward the request
-	client := &http.Client{}
-	resp, err := client.Do(r)
-	if err != nil {
-		log.Printf("Error connecting to upstream server: %v", err)
-		http.Error(w, "Failed to connect to upstream server", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
+    // Modify the request URL to point to the upstream server
+    r.URL.Scheme = parsedUpstream.Scheme
+    r.URL.Host = parsedUpstream.Host
+    r.RequestURI = ""
+    r.Host = parsedUpstream.Host
 
-	// Copy response from upstream server to the client
-	for k, v := range resp.Header {
-		w.Header()[k] = v
-	}
-	w.WriteHeader(resp.StatusCode)
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("Failed to copy response body: %v", err)
-	}
+    // Create an HTTP client
+    var client *http.Client
+    if parsedUpstream.Scheme == "https" {
+        // Create a custom HTTP client that skips certificate verification for HTTPS
+        customTransport := &http.Transport{
+            TLSClientConfig: &tls.Config{
+                InsecureSkipVerify: true, // WARNING: Only use in trusted environments
+            },
+        }
+        client = &http.Client{Transport: customTransport}
+    } else {
+        // Default HTTP client for non-HTTPS
+        client = &http.Client{}
+    }
+
+    // Forward the request
+    resp, err := client.Do(r)
+    if err != nil {
+        log.Printf("Error connecting to upstream server: %v", err)
+        http.Error(w, "Failed to connect to upstream server", http.StatusBadGateway)
+        return
+    }
+    defer resp.Body.Close()
+
+    // Copy response from upstream server to the client
+    for k, v := range resp.Header {
+        w.Header()[k] = v
+    }
+    w.WriteHeader(resp.StatusCode)
+    if _, err := io.Copy(w, resp.Body); err != nil {
+        log.Printf("Failed to copy response body: %v", err)
+    }
 }
 
 
